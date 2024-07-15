@@ -8,10 +8,10 @@
 <body>
     <h1>Last.fm Heatmap</h1>
     <form method="post">
-        Last.fm Username: <input type="text" name="username" required>
+        Last.fm Username: <input type="text" name="username">
         <input type="submit" value="Submit">
     </form>
-    <div id="heatmap-container">
+    <div id="heatmap">
         {% if filename %}
             <h2>Heatmap:</h2>
             <img src="{{ filename }}" alt="Heatmap">

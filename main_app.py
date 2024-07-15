@@ -37,7 +37,6 @@ async def fetch_all_pages(username):
     }
 
     async with aiohttp.ClientSession() as session:
-        # Fetch the first page to determine the total number of pages
         first_page_data = await fetch_page(session, url, params, 1)
         if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
             return []
@@ -114,11 +113,14 @@ def create_heatmap(daily_counts):
 
 @app.route('/', methods=['GET', 'POST'])
 async def index():
+    filename = None
     if request.method == 'POST':
         username = request.form['username']
 
         all_tracks = await fetch_all_pages(username)
         daily_counts = process_scrobble_data(all_tracks)
         filename = create_heatmap(daily_counts)
-        return jsonify({'status': 'success', 'message': 'Heatmap created successfully', 'filename': filename})
-    return render_template('index.html')
+    return render_template('index.html', filename=filename)
+
+if __name__ == '__main__':
+    app.run()
