@@ -2,17 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Last.fm Heatmap</title>
+    <title>Last.fm Heatmap Generator</title>
 </head>
 <body>
     <h1>Last.fm Heatmap Generator</h1>
-    <form method="POST">
-        <label for="api_key">API Key:</label><br>
-        <input type="text" id="api_key" name="api_key" required><br><br>
-        <label for="username">Username:</label><br>
-        <input type="text" id="username" name="username" required><br><br>
-        <input type="submit" value="Generate Heatmap">
+    <form method="post" action="/">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        <button type="submit">Generate Heatmap</button>
     </form>
 </body>
 </html>

@@ -14,7 +14,7 @@ nest_asyncio.apply()
 
 app = Flask(__name__)
 
-API_KEY = os.getenv('LASTFM_API_KEY', '47a3bb30787578c70e3bf827e0281936')
+API_KEY = os.getenv('LASTFM_API_KEY')
 
 async def fetch_page(session, url, params, page, retries=3):
     params['page'] = page
