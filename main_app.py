@@ -8,7 +8,7 @@ import numpy as np
 import aiohttp
 from datetime import datetime
 import nest_asyncio
-from matplotlib.patches import Patch
+import os
 
 nest_asyncio.apply()
 
@@ -16,19 +16,17 @@ app = Flask(__name__)
 
 API_KEY = os.getenv('LASTFM_API_KEY')
 
-async def fetch_page(session, url, params, page, retries=3):
+async def fetch_page(session, url, params, page):
     params['page'] = page
-    for attempt in range(retries):
-        async with session.get(url, params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data
-            else:
-                print(f"Error fetching page {page}: {response.status}")
-                await asyncio.sleep(1)
-    return None
+    async with session.get(url, params=params) as response:
+        if response.status == 200:
+            data = await response.json()
+            return data
+        else:
+            print(f"Error fetching page {page}: {response.status}")
+            return None
 
-async def fetch_all_pages_incrementally(username):
+async def fetch_all_pages(username, total_pages):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
         'method': 'user.getRecentTracks',
@@ -39,45 +37,38 @@ async def fetch_all_pages_incrementally(username):
     }
 
     async with aiohttp.ClientSession() as session:
-        print("Fetching first page...")
-        first_page_data = await fetch_page(session, url, params, 1)
-        if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
-            print("No tracks found or invalid data structure.")
-            return []
-
-        total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
-        print(f"Total pages: {total_pages}")
-
         all_tracks = []
         for page in range(1, total_pages + 1):
-            page_data = await fetch_page(session, url, params, page)
-            if page_data and 'recenttracks' in page_data and 'track' in page_data['recenttracks']:
-                all_tracks.extend(page_data['recenttracks']['track'])
+            data = await fetch_page(session, url, params, page)
+            if data and 'recenttracks' in data and 'track' in data['recenttracks']:
+                all_tracks.extend(data['recenttracks']['track'])
+            # Break if memory usage is too high
+            if len(all_tracks) > 10000:
+                break
 
         return all_tracks
 
 def process_scrobble_data(tracks):
-    print("Processing scrobble data...")
     df = pd.DataFrame(tracks)
     if df.empty:
-        print("No tracks to process.")
         return pd.DataFrame()
 
     df['date'] = pd.to_datetime(df['date'].apply(lambda x: x['#text']), format='%d %b %Y, %H:%M')
     df['Day'] = df['date'].dt.date
     daily_counts = df.groupby('Day').size().reset_index(name='Counts')
-    print("Processing complete.")
     return daily_counts
 
-def create_heatmap(daily_counts, filename='static/heatmap.png'):
-    print("Creating heatmap...")
+def create_heatmap(daily_counts):
+    if not os.path.exists('static'):
+        os.makedirs('static')
+    
     daily_counts['Day'] = pd.to_datetime(daily_counts['Day'])
     daily_counts['DayOfMonth'] = daily_counts['Day'].dt.day
     daily_counts['Month'] = daily_counts['Day'].dt.to_period('M')
     pivot_table = daily_counts.pivot_table(values='Counts', index='DayOfMonth', columns='Month', fill_value=0)
     full_index = pd.Index(range(1, 32), name='DayOfMonth')
     pivot_table = pivot_table.reindex(full_index)
-    pivot_table_log = pivot_table.map(lambda x: np.log10(x + 1) if x > 0 else np.nan)
+    pivot_table_log = pivot_table.applymap(lambda x: np.log10(x + 1) if x > 0 else np.nan)
 
     for day in range(29, 32):
         for month in pivot_table_log.columns:
@@ -106,25 +97,24 @@ def create_heatmap(daily_counts, filename='static/heatmap.png'):
     ax.set_xticklabels(x_labels)
 
     plt.tight_layout()
-    
-    # Ensure the directory exists
-    if not os.path.exists('static'):
-        os.makedirs('static')
-    
+    filename = 'static/heatmap.png'
     plt.savefig(filename)
     plt.close()
-    print("Heatmap created successfully.")
+    return filename
 
 @app.route('/', methods=['GET', 'POST'])
 async def index():
     if request.method == 'POST':
         username = request.form['username']
-        tracks = await fetch_all_pages_incrementally(username)
-        daily_counts = process_scrobble_data(tracks)
-        create_heatmap(daily_counts)
-        return jsonify({'status': 'success', 'message': 'Heatmap created successfully'})
-    return render_template('index.html')
+        url = 'http://ws.audioscrobbler.com/2.0/'
+        params = {
+            'method': 'user.getRecentTracks',
+            'user': username,
+            'api_key': API_KEY,
+            'format': 'json',
+            'limit': 200,
+        }
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+        async with aiohttp.ClientSession() as session:
+            first_page_data = await fetch_page(session, url, params, 1)
+            if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page
