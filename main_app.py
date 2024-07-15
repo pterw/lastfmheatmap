@@ -8,7 +8,7 @@ import numpy as np
 import aiohttp
 from datetime import datetime
 import nest_asyncio
-from matplotlib.patches import Patch  # Add this import
+from matplotlib.patches import Patch
 
 nest_asyncio.apply()
 
@@ -26,7 +26,7 @@ async def fetch_page(session, url, params, page):
             print(f"Error fetching page {page}: {response.status}")
             return None
 
-async def fetch_all_pages(username, total_pages, max_concurrent_requests=10):
+async def fetch_all_pages(username):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
         'method': 'user.getRecentTracks',
@@ -37,21 +37,24 @@ async def fetch_all_pages(username, total_pages, max_concurrent_requests=10):
     }
 
     async with aiohttp.ClientSession() as session:
-        all_tracks = []
-        semaphore = asyncio.Semaphore(max_concurrent_requests)
-
-        async def fetch_with_semaphore(page):
-            async with semaphore:
-                return await fetch_page(session, url, params, page)
-
-        tasks = [fetch_with_semaphore(page) for page in range(1, total_pages + 1)]
-        responses = await asyncio.gather(*tasks)
+        # Fetch the first page to determine the total number of pages
+        first_page_data = await fetch_page(session, url, params, 1)
+        if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
+            return []
         
-        for data in responses:
+        total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
+        print(f"Total pages: {total_pages}")
+
+        all_tracks = first_page_data['recenttracks']['track']
+
+        tasks = []
+        for page in range(2, total_pages + 1):
+            tasks.append(fetch_page(session, url, params, page))
+
+        results = await asyncio.gather(*tasks)
+        for data in results:
             if data and 'recenttracks' in data and 'track' in data['recenttracks']:
                 all_tracks.extend(data['recenttracks']['track'])
-            if len(all_tracks) > 10000:  # Break if memory usage is too high
-                break
 
         return all_tracks
 
@@ -62,16 +65,19 @@ def process_scrobble_data(tracks):
 
     df['date'] = pd.to_datetime(df['date'].apply(lambda x: x['#text']), format='%d %b %Y, %H:%M')
     df['Day'] = df['date'].dt.date
-    return df.groupby('Day').size().reset_index(name='Counts')
+    daily_counts = df.groupby('Day').size().reset_index(name='Counts')
+    return daily_counts
 
 def create_heatmap(daily_counts):
-    os.makedirs('static', exist_ok=True)
-
+    if not os.path.exists('static'):
+        os.makedirs('static')
+    
     daily_counts['Day'] = pd.to_datetime(daily_counts['Day'])
     daily_counts['DayOfMonth'] = daily_counts['Day'].dt.day
     daily_counts['Month'] = daily_counts['Day'].dt.to_period('M')
     pivot_table = daily_counts.pivot_table(values='Counts', index='DayOfMonth', columns='Month', fill_value=0)
-    pivot_table = pivot_table.reindex(pd.Index(range(1, 32), name='DayOfMonth'))
+    full_index = pd.Index(range(1, 32), name='DayOfMonth')
+    pivot_table = pivot_table.reindex(full_index)
     pivot_table_log = pivot_table.applymap(lambda x: np.log10(x + 1) if x > 0 else np.nan)
 
     for day in range(29, 32):
@@ -82,9 +88,8 @@ def create_heatmap(daily_counts):
     cmap = sns.color_palette("rocket_r", as_cmap=True)
     cmap.set_bad(color='white')
 
-    plt.figure(figsize=(25, 10))
-    ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75},
-                     mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
+    plt.figure(figsize=(25, 10))  
+    ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75}, mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
     plt.title('Heatmap of Songs Listened to Per Day')
     plt.xlabel('Month')
     plt.ylabel('Day of Month')
@@ -109,26 +114,11 @@ def create_heatmap(daily_counts):
 
 @app.route('/', methods=['GET', 'POST'])
 async def index():
-    filename = None
     if request.method == 'POST':
         username = request.form['username']
-        url = 'http://ws.audioscrobbler.com/2.0/'
-        params = {
-            'method': 'user.getRecentTracks',
-            'user': username,
-            'api_key': API_KEY,
-            'format': 'json',
-            'limit': 200,
-        }
 
-        async with aiohttp.ClientSession() as session:
-            first_page_data = await fetch_page(session, url, params, 1)
-            if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
-                return jsonify({'status': 'error', 'message': 'No tracks found or invalid data structure'})
-
-            total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
-            all_tracks = await fetch_all_pages(username, total_pages)
-            daily_counts = process_scrobble_data(all_tracks)
-            filename = create_heatmap(daily_counts)
-    
-    return render_template('index.html', filename=filename)
+        all_tracks = await fetch_all_pages(username)
+        daily_counts = process_scrobble_data(all_tracks)
+        filename = create_heatmap(daily_counts)
+        return jsonify({'status': 'success', 'message': 'Heatmap created successfully', 'filename': filename})
+    return render_template('index.html')
