@@ -117,4 +117,12 @@ async def index():
 
         async with aiohttp.ClientSession() as session:
             first_page_data = await fetch_page(session, url, params, 1)
-            if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page
+            if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
+                return jsonify({'status': 'error', 'message': 'No tracks found or invalid data structure'})
+
+            total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
+            all_tracks = await fetch_all_pages(username, total_pages)
+            daily_counts = process_scrobble_data(all_tracks)
+            filename = create_heatmap(daily_counts)
+            return jsonify({'status': 'success', 'message': 'Heatmap created successfully', 'filename': filename})
+    return render_template('index.html')
