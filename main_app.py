@@ -28,7 +28,7 @@ async def fetch_page(session, url, params, page, retries=3):
                 await asyncio.sleep(1)
     return None
 
-async def fetch_all_pages(username):
+async def fetch_all_pages_incrementally(username):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
         'method': 'user.getRecentTracks',
@@ -48,15 +48,13 @@ async def fetch_all_pages(username):
         total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
         print(f"Total pages: {total_pages}")
 
-        tasks = [fetch_page(session, url, params, page) for page in range(1, total_pages + 1)]
-        pages_data = await asyncio.gather(*tasks)
+        all_tracks = []
+        for page in range(1, total_pages + 1):
+            page_data = await fetch_page(session, url, params, page)
+            if page_data and 'recenttracks' in page_data and 'track' in page_data['recenttracks']:
+                all_tracks.extend(page_data['recenttracks']['track'])
 
-    all_tracks = []
-    for data in pages_data:
-        if data and 'recenttracks' in data and 'track' in data['recenttracks']:
-            all_tracks.extend(data['recenttracks']['track'])
-
-    return all_tracks
+        return all_tracks
 
 def process_scrobble_data(tracks):
     print("Processing scrobble data...")
@@ -89,7 +87,7 @@ def create_heatmap(daily_counts, filename='static/heatmap.png'):
     cmap = sns.color_palette("rocket_r", as_cmap=True)
     cmap.set_bad(color='white')
 
-    plt.figure(figsize=(25, 10))
+    plt.figure(figsize=(25, 10))  
     ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75}, mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
     plt.title('Heatmap of Songs Listened to Per Day')
     plt.xlabel('Month')
@@ -108,6 +106,11 @@ def create_heatmap(daily_counts, filename='static/heatmap.png'):
     ax.set_xticklabels(x_labels)
 
     plt.tight_layout()
+    
+    # Ensure the directory exists
+    if not os.path.exists('static'):
+        os.makedirs('static')
+    
     plt.savefig(filename)
     plt.close()
     print("Heatmap created successfully.")
@@ -116,10 +119,10 @@ def create_heatmap(daily_counts, filename='static/heatmap.png'):
 async def index():
     if request.method == 'POST':
         username = request.form['username']
-        tracks = await fetch_all_pages(username)
+        tracks = await fetch_all_pages_incrementally(username)
         daily_counts = process_scrobble_data(tracks)
         create_heatmap(daily_counts)
-        return render_template('index.html', heatmap_url='/static/heatmap.png')
+        return jsonify({'status': 'success', 'message': 'Heatmap created successfully'})
     return render_template('index.html')
 
 if __name__ == '__main__':
