@@ -8,6 +8,7 @@ import numpy as np
 import aiohttp
 from datetime import datetime
 import nest_asyncio
+from matplotlib.patches import Patch  # Add this import
 
 nest_asyncio.apply()
 
