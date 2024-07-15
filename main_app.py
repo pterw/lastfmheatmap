@@ -1,3 +1,4 @@
+import os
 from flask import Flask, request, render_template, jsonify
 import asyncio
 import pandas as pd
@@ -13,6 +14,8 @@ nest_asyncio.apply()
 
 app = Flask(__name__)
 
+API_KEY = os.getenv('LASTFM_API_KEY', '47a3bb30787578c70e3bf827e0281936')
+
 async def fetch_page(session, url, params, page, retries=3):
     params['page'] = page
     for attempt in range(retries):
@@ -25,12 +28,12 @@ async def fetch_page(session, url, params, page, retries=3):
                 await asyncio.sleep(1)
     return None
 
-async def fetch_all_pages(api_key, username):
+async def fetch_all_pages(username):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
         'method': 'user.getRecentTracks',
         'user': username,
-        'api_key': api_key,
+        'api_key': API_KEY,
         'format': 'json',
         'limit': 200,
     }
@@ -77,7 +80,7 @@ def create_heatmap(daily_counts):
     full_index = pd.Index(range(1, 32), name='DayOfMonth')
     pivot_table = pivot_table.reindex(full_index)
     pivot_table_log = pivot_table.map(lambda x: np.log10(x + 1) if x > 0 else np.nan)
-    
+
     for day in range(29, 32):
         for month in pivot_table_log.columns:
             if day > month.days_in_month:
@@ -111,13 +114,13 @@ def create_heatmap(daily_counts):
 @app.route('/', methods=['GET', 'POST'])
 async def index():
     if request.method == 'POST':
-        api_key = request.form['api_key']
         username = request.form['username']
-        tracks = await fetch_all_pages(api_key, username)
+        tracks = await fetch_all_pages(username)
         daily_counts = process_scrobble_data(tracks)
         create_heatmap(daily_counts)
         return jsonify({'status': 'success', 'message': 'Heatmap created successfully'})
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
