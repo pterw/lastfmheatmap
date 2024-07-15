@@ -19,12 +19,13 @@ async def fetch_page(session, url, params, page):
     params['page'] = page
     async with session.get(url, params=params) as response:
         if response.status == 200:
-            return await response.json()
+            data = await response.json()
+            return data
         else:
             print(f"Error fetching page {page}: {response.status}")
             return None
 
-async def fetch_all_pages(username, total_pages):
+async def fetch_all_pages(username, total_pages, max_concurrent_requests=10):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
         'method': 'user.getRecentTracks',
@@ -36,11 +37,15 @@ async def fetch_all_pages(username, total_pages):
 
     async with aiohttp.ClientSession() as session:
         all_tracks = []
-        tasks = []
-        for page in range(1, total_pages + 1):
-            tasks.append(fetch_page(session, url, params, page))
+        semaphore = asyncio.Semaphore(max_concurrent_requests)
 
+        async def fetch_with_semaphore(page):
+            async with semaphore:
+                return await fetch_page(session, url, params, page)
+
+        tasks = [fetch_with_semaphore(page) for page in range(1, total_pages + 1)]
         responses = await asyncio.gather(*tasks)
+        
         for data in responses:
             if data and 'recenttracks' in data and 'track' in data['recenttracks']:
                 all_tracks.extend(data['recenttracks']['track'])
