@@ -109,6 +109,7 @@ def create_heatmap(daily_counts):
 
 @app.route('/', methods=['GET', 'POST'])
 async def index():
+    filename = None
     if request.method == 'POST':
         username = request.form['username']
         url = 'http://ws.audioscrobbler.com/2.0/'
@@ -129,5 +130,5 @@ async def index():
             all_tracks = await fetch_all_pages(username, total_pages)
             daily_counts = process_scrobble_data(all_tracks)
             filename = create_heatmap(daily_counts)
-            return jsonify({'status': 'success', 'message': 'Heatmap created successfully', 'filename': filename})
-    return render_template('index.html')
+    
+    return render_template('index.html', filename=filename)
