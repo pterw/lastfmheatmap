@@ -71,7 +71,7 @@ def process_scrobble_data(tracks):
     print("Processing complete.")
     return daily_counts
 
-def create_heatmap(daily_counts):
+def create_heatmap(daily_counts, filename='static/heatmap.png'):
     print("Creating heatmap...")
     daily_counts['Day'] = pd.to_datetime(daily_counts['Day'])
     daily_counts['DayOfMonth'] = daily_counts['Day'].dt.day
@@ -89,7 +89,7 @@ def create_heatmap(daily_counts):
     cmap = sns.color_palette("rocket_r", as_cmap=True)
     cmap.set_bad(color='white')
 
-    plt.figure(figsize=(25, 10))  
+    plt.figure(figsize=(25, 10))
     ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75}, mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
     plt.title('Heatmap of Songs Listened to Per Day')
     plt.xlabel('Month')
@@ -108,7 +108,8 @@ def create_heatmap(daily_counts):
     ax.set_xticklabels(x_labels)
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig(filename)
+    plt.close()
     print("Heatmap created successfully.")
 
 @app.route('/', methods=['GET', 'POST'])
@@ -118,7 +119,7 @@ async def index():
         tracks = await fetch_all_pages(username)
         daily_counts = process_scrobble_data(tracks)
         create_heatmap(daily_counts)
-        return jsonify({'status': 'success', 'message': 'Heatmap created successfully'})
+        return render_template('index.html', heatmap_url='/static/heatmap.png')
     return render_template('index.html')
 
 if __name__ == '__main__':

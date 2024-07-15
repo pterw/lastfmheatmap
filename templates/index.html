@@ -11,5 +11,9 @@
         <input type="text" id="username" name="username" required>
         <button type="submit">Generate Heatmap</button>
     </form>
+    {% if heatmap_url %}
+    <h2>Generated Heatmap</h2>
+    <img src="{{ heatmap_url }}" alt="Heatmap">
+    {% endif %}
 </body>
 </html>
