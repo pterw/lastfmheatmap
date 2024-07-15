@@ -8,7 +8,6 @@ import numpy as np
 import aiohttp
 from datetime import datetime
 import nest_asyncio
-import os
 
 nest_asyncio.apply()
 
@@ -20,8 +19,7 @@ async def fetch_page(session, url, params, page):
     params['page'] = page
     async with session.get(url, params=params) as response:
         if response.status == 200:
-            data = await response.json()
-            return data
+            return await response.json()
         else:
             print(f"Error fetching page {page}: {response.status}")
             return None
@@ -38,12 +36,15 @@ async def fetch_all_pages(username, total_pages):
 
     async with aiohttp.ClientSession() as session:
         all_tracks = []
+        tasks = []
         for page in range(1, total_pages + 1):
-            data = await fetch_page(session, url, params, page)
+            tasks.append(fetch_page(session, url, params, page))
+
+        responses = await asyncio.gather(*tasks)
+        for data in responses:
             if data and 'recenttracks' in data and 'track' in data['recenttracks']:
                 all_tracks.extend(data['recenttracks']['track'])
-            # Break if memory usage is too high
-            if len(all_tracks) > 10000:
+            if len(all_tracks) > 10000:  # Break if memory usage is too high
                 break
 
         return all_tracks
@@ -55,19 +56,16 @@ def process_scrobble_data(tracks):
 
     df['date'] = pd.to_datetime(df['date'].apply(lambda x: x['#text']), format='%d %b %Y, %H:%M')
     df['Day'] = df['date'].dt.date
-    daily_counts = df.groupby('Day').size().reset_index(name='Counts')
-    return daily_counts
+    return df.groupby('Day').size().reset_index(name='Counts')
 
 def create_heatmap(daily_counts):
-    if not os.path.exists('static'):
-        os.makedirs('static')
-    
+    os.makedirs('static', exist_ok=True)
+
     daily_counts['Day'] = pd.to_datetime(daily_counts['Day'])
     daily_counts['DayOfMonth'] = daily_counts['Day'].dt.day
     daily_counts['Month'] = daily_counts['Day'].dt.to_period('M')
     pivot_table = daily_counts.pivot_table(values='Counts', index='DayOfMonth', columns='Month', fill_value=0)
-    full_index = pd.Index(range(1, 32), name='DayOfMonth')
-    pivot_table = pivot_table.reindex(full_index)
+    pivot_table = pivot_table.reindex(pd.Index(range(1, 32), name='DayOfMonth'))
     pivot_table_log = pivot_table.applymap(lambda x: np.log10(x + 1) if x > 0 else np.nan)
 
     for day in range(29, 32):
@@ -78,8 +76,9 @@ def create_heatmap(daily_counts):
     cmap = sns.color_palette("rocket_r", as_cmap=True)
     cmap.set_bad(color='white')
 
-    plt.figure(figsize=(25, 10))  
-    ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75}, mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
+    plt.figure(figsize=(25, 10))
+    ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75},
+                     mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
     plt.title('Heatmap of Songs Listened to Per Day')
     plt.xlabel('Month')
     plt.ylabel('Day of Month')
