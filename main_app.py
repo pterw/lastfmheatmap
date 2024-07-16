@@ -61,7 +61,7 @@ async def fetch_all_pages(username):
 
     all_tracks = first_page_data['recenttracks']['track']
 
-    page_batch_size = 20
+    page_batch_size = 10  # Reduced batch size to limit memory usage
     with multiprocessing.Pool() as pool:
         results = []
         for start_page in range(2, total_pages + 1, page_batch_size):
@@ -69,6 +69,8 @@ async def fetch_all_pages(username):
             results.append(pool.apply_async(process_page_range, (url, params, start_page, end_page)))
         for result in results:
             all_tracks.extend(result.get())
+            # Explicitly free up memory
+            del result
 
     return all_tracks
 
