@@ -1,4 +1,5 @@
 import os
+import multiprocessing
 from flask import Flask, request, render_template, jsonify
 import asyncio
 import pandas as pd
@@ -28,6 +29,19 @@ async def fetch_page(session, url, params, page):
             print(f"Error fetching page {page}: {response.status}")
             return None
 
+async def fetch_pages_range(url, params, start_page, end_page):
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_page(session, url, params, page) for page in range(start_page, end_page + 1)]
+        results = await asyncio.gather(*tasks)
+        tracks = []
+        for data in results:
+            if data and 'recenttracks' in data and 'track' in data['recenttracks']:
+                tracks.extend(data['recenttracks']['track'])
+        return tracks
+
+def process_page_range(url, params, start_page, end_page):
+    return asyncio.run(fetch_pages_range(url, params, start_page, end_page))
+
 async def fetch_all_pages(username):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
@@ -38,34 +52,34 @@ async def fetch_all_pages(username):
         'limit': 200,
     }
 
-    async with aiohttp.ClientSession() as session:
-        first_page_data = await fetch_page(session, url, params, 1)
-        if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
-            return []
-        
-        total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
-        print(f"Total pages: {total_pages}")
+    first_page_data = await fetch_page(aiohttp.ClientSession(), url, params, 1)
+    if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
+        return []
+    
+    total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
+    print(f"Total pages: {total_pages}")
 
-        all_tracks = first_page_data['recenttracks']['track']
-        page_batch_size = 50  # Process 50 pages at a time
+    all_tracks = first_page_data['recenttracks']['track']
 
+    page_batch_size = 20
+    with multiprocessing.Pool() as pool:
+        results = []
         for start_page in range(2, total_pages + 1, page_batch_size):
             end_page = min(start_page + page_batch_size - 1, total_pages)
-            tasks = [fetch_page(session, url, params, page) for page in range(start_page, end_page + 1)]
-            results = await asyncio.gather(*tasks)
-            for data in results:
-                if data and 'recenttracks' in data and 'track' in data['recenttracks']:
-                    all_tracks.extend(data['recenttracks']['track'])
+            results.append(pool.apply_async(process_page_range, (url, params, start_page, end_page)))
+        for result in results:
+            all_tracks.extend(result.get())
 
-        return all_tracks
+    return all_tracks
 
 def process_scrobble_data(tracks):
     if not tracks:
         return pd.DataFrame()
 
-    data = [{'date': track['date']['#text']} for track in tracks if 'date' in track]
+    data = [{'date': track['date']['#text']} for track in tracks if 'date' in track and isinstance(track['date'], dict) and '#text' in track['date']]
     df = pd.DataFrame(data)
-    df['date'] = pd.to_datetime(df['date'], format='%d %b %Y, %H:%M')
+    df['date'] = pd.to_datetime(df['date'], format='%d %b %Y, %H:%M', errors='coerce')
+    df = df.dropna(subset=['date'])
     df['Day'] = df['date'].dt.date
     daily_counts = df.groupby('Day').size().reset_index(name='Counts')
     return daily_counts
