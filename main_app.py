@@ -1,5 +1,4 @@
 import os
-import multiprocessing
 from flask import Flask, request, render_template, jsonify
 import asyncio
 import pandas as pd
@@ -29,19 +28,6 @@ async def fetch_page(session, url, params, page):
             print(f"Error fetching page {page}: {response.status}")
             return None
 
-async def fetch_pages_range(url, params, start_page, end_page):
-    async with aiohttp.ClientSession() as session:
-        tasks = [fetch_page(session, url, params, page) for page in range(start_page, end_page + 1)]
-        results = await asyncio.gather(*tasks)
-        tracks = []
-        for data in results:
-            if data and 'recenttracks' in data and 'track' in data['recenttracks']:
-                tracks.extend(data['recenttracks']['track'])
-        return tracks
-
-def process_page_range(url, params, start_page, end_page):
-    return asyncio.run(fetch_pages_range(url, params, start_page, end_page))
-
 async def fetch_all_pages(username):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
@@ -52,36 +38,38 @@ async def fetch_all_pages(username):
         'limit': 200,
     }
 
-    first_page_data = await fetch_page(aiohttp.ClientSession(), url, params, 1)
-    if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
-        return []
-    
-    total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
-    print(f"Total pages: {total_pages}")
+    all_tracks = []
+    async with aiohttp.ClientSession() as session:
+        first_page_data = await fetch_page(session, url, params, 1)
+        if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
+            return []
+        
+        total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
+        print(f"Total pages: {total_pages}")
 
-    all_tracks = first_page_data['recenttracks']['track']
+        all_tracks.extend(first_page_data['recenttracks']['track'])
+        for page in range(2, total_pages + 1):
+            data = await fetch_page(session, url, params, page)
+            if data and 'recenttracks' in data and 'track' in data['recenttracks']:
+                all_tracks.extend(data['recenttracks']['track'])
 
-    page_batch_size = 10  # Reduced batch size to limit memory usage
-    with multiprocessing.Pool() as pool:
-        results = []
-        for start_page in range(2, total_pages + 1, page_batch_size):
-            end_page = min(start_page + page_batch_size - 1, total_pages)
-            results.append(pool.apply_async(process_page_range, (url, params, start_page, end_page)))
-        for result in results:
-            all_tracks.extend(result.get())
-            # Explicitly free up memory
-            del result
+            # Avoid fetching too many pages at once
+            if page % 10 == 0:
+                await asyncio.sleep(1)
 
     return all_tracks
 
 def process_scrobble_data(tracks):
-    if not tracks:
+    df = pd.DataFrame(tracks)
+    if df.empty:
         return pd.DataFrame()
 
-    data = [{'date': track['date']['#text']} for track in tracks if 'date' in track and isinstance(track['date'], dict) and '#text' in track['date']]
-    df = pd.DataFrame(data)
-    df['date'] = pd.to_datetime(df['date'], format='%d %b %Y, %H:%M', errors='coerce')
-    df = df.dropna(subset=['date'])
+    def extract_date(x):
+        if isinstance(x, dict):
+            return x.get('#text', None)
+        return None
+
+    df['date'] = pd.to_datetime(df['date'].apply(extract_date), format='%d %b %Y, %H:%M')
     df['Day'] = df['date'].dt.date
     daily_counts = df.groupby('Day').size().reset_index(name='Counts')
     return daily_counts
@@ -106,7 +94,7 @@ def create_heatmap(daily_counts):
     cmap = sns.color_palette("rocket_r", as_cmap=True)
     cmap.set_bad(color='white')
 
-    plt.figure(figsize=(25, 10))  
+    plt.figure(figsize=(25, 10))
     ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75}, mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
     plt.title('Heatmap of Songs Listened to Per Day')
     plt.xlabel('Month')
