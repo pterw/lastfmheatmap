@@ -8,4 +8,4 @@ https://lastfmproject-d6593f6b5f86.herokuapp.com/
 
 NOTE: I have to login to heroku for the web app to be accessible to others.
 
-Preview: **![alt text](http://url/to/img.png)**
+Preview: **![alt text](https://imgur.com/a/ltFOTqs))**
