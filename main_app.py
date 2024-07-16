@@ -48,6 +48,7 @@ async def fetch_all_pages(username):
 
         all_tracks = first_page_data['recenttracks']['track']
         page_batch_size = 50  # Process 50 pages at a time
+
         for start_page in range(2, total_pages + 1, page_batch_size):
             end_page = min(start_page + page_batch_size - 1, total_pages)
             tasks = [fetch_page(session, url, params, page) for page in range(start_page, end_page + 1)]
@@ -59,17 +60,12 @@ async def fetch_all_pages(username):
         return all_tracks
 
 def process_scrobble_data(tracks):
-    df = pd.DataFrame(tracks)
-    if df.empty:
+    if not tracks:
         return pd.DataFrame()
 
-    # Handle cases where 'date' might not be a dictionary
-    def extract_date(x):
-        if isinstance(x, dict):
-            return x.get('#text', None)
-        return None
-
-    df['date'] = pd.to_datetime(df['date'].apply(extract_date), format='%d %b %Y, %H:%M')
+    data = [{'date': track['date']['#text']} for track in tracks if 'date' in track]
+    df = pd.DataFrame(data)
+    df['date'] = pd.to_datetime(df['date'], format='%d %b %Y, %H:%M')
     df['Day'] = df['date'].dt.date
     daily_counts = df.groupby('Day').size().reset_index(name='Counts')
     return daily_counts
