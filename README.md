@@ -9,19 +9,26 @@ See:
 
 https://lastfmproject-d6593f6b5f86.herokuapp.com/
 
-**NOTE: I have to login to heroku for the web app to be accessible to others.**
+**NOTE:** I have to login to heroku for the web app to be accessible to others.
 
 Preview: **![alt text](https://i.imgur.com/OYzFq0I.png)**
 
-As of 2024-08-02, the project aims to be updated with the following:
+**As of 2024-08-02, the project aims to be updated with the following:**
 
 -Better placement of heatmap 
+
 -Changing title of the heatmap to include last.fm username
+
 -Less clutter on ticks
+
 -Better representation of months with less than 31 days by using gray tiles for non-existant days. (e.g. June 31st would be a gray box.)
+
 -Updates to layout of webapp
+
 -Ability to download your heatmap
+
 -Ability to change colour scheme via color palettes available in seaborn
+
 -Improving axis titles to be more descriptive
 
 **Additional planned updates:**
@@ -50,3 +57,5 @@ As of 2024-08-02, the project aims to be updated with the following:
   
   -Adding features that are limited to last.fm pro accounts (e.g. last.month, historical reports, tag timeline & advanced discovery charts)
 
+
+For any commments & suggestions, feel free to contact me!
