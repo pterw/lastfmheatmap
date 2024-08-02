@@ -9,7 +9,7 @@ See:
 
 https://lastfmproject-d6593f6b5f86.herokuapp.com/
 
-NOTE: I have to login to heroku for the web app to be accessible to others.
+**NOTE: I have to login to heroku for the web app to be accessible to others.**
 
 Preview: **![alt text](https://i.imgur.com/OYzFq0I.png)**
 
@@ -24,7 +24,7 @@ As of 2024-08-02, the project aims to be updated with the following:
 -Ability to change colour scheme via color palettes available in seaborn
 -Improving axis titles to be more descriptive
 
-Additional planned updates:
+**Additional planned updates:**
 
 -Faster processing for accounts with >100,000 scrobbles
 
@@ -39,7 +39,8 @@ Additional planned updates:
 -GUI
 
 
-  Future ideas:
+
+  **Future ideas:**
 
   -Implementing a "mood" heatmap (Music Mood Map), where songs are classed as "happy", "neutral", "sad" (Plan to fetch tags using RYM or MusicBrainz) 
   
