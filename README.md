@@ -27,17 +27,25 @@ As of 2024-08-02, the project aims to be updated with the following:
 Additional planned updates:
 
 -Faster processing for accounts with >100,000 scrobbles
+
 -Mobile compatibility
+
 -Interactivity when hovering over a tile, displaying #of songs played that day
+
 -Option to highlight days where most listen to song was listend to
+
 -Option to select one of user's top 10 artists and highlight days on which their music was played.
+
 -GUI
 
 
   Future ideas:
 
   -Implementing a "mood" heatmap (Music Mood Map), where songs are classed as "happy", "neutral", "sad" (Plan to fetch tags using RYM or MusicBrainz) 
+  
   -Implementing a "new music" heatmap (Music Discovery Heatmap) that highlights days where new artists were listened to the most. 
+  
   -Implementing a genre map (Music Genre Map) where the most predominant genre listened to in a day is highlighted a certain colour. (Possibly a pie chart for overall genre listening?)
+  
   -Adding features that are limited to last.fm pro accounts (e.g. last.month, historical reports, tag timeline & advanced discovery charts)
 
