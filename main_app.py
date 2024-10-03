@@ -84,35 +84,56 @@ def create_heatmap(daily_counts):
     pivot_table = daily_counts.pivot_table(values='Counts', index='DayOfMonth', columns='Month', fill_value=0)
     full_index = pd.Index(range(1, 32), name='DayOfMonth')
     pivot_table = pivot_table.reindex(full_index)
-    pivot_table_log = pivot_table.applymap(lambda x: np.log10(x + 1) if x > 0 else np.nan)
 
+    # Set NaN for non-existent days in each month
     for day in range(29, 32):
-        for month in pivot_table_log.columns:
+        for month in pivot_table.columns:
             if day > month.days_in_month:
-                pivot_table_log.at[day, month] = np.nan
+                pivot_table.at[day, month] = np.nan
+    
+    # Apply log transformation without converting zero counts to NaN
+    pivot_table_log = pivot_table.applymap(lambda x: np.log10(x + 1) if not np.isnan(x) else np.nan)
 
+    # Set up the colormap
     cmap = sns.color_palette("rocket_r", as_cmap=True)
-    cmap.set_bad(color='white')
+    cmap.set_bad(color='gray')  # Non-existent days will be gray
 
     plt.figure(figsize=(25, 10))
-    ax = sns.heatmap(pivot_table_log, cmap=cmap, cbar=True, cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75}, mask=pivot_table_log.isna(), vmin=0, vmax=pivot_table_log.max().max(), square=True)
+    ax = sns.heatmap(
+        pivot_table_log,
+        cmap=cmap,
+        cbar=True,
+        cbar_kws={'label': 'Number of Songs Played', 'shrink': 0.75},
+        vmin=0,
+        vmax=pivot_table_log.max().max(),
+        square=True
+    )
     plt.title('Heatmap of Songs Listened to Per Day')
     plt.xlabel('Month')
     plt.ylabel('Day of Month')
     plt.xticks(rotation=45)
 
+    # Adjust colorbar ticks
     cbar = ax.collections[0].colorbar
     max_songs = int(10**pivot_table_log.max().max() - 1)
     cbar.set_ticks([0, pivot_table_log.max().max()])
     cbar.set_ticklabels(['1 song', f'{max_songs} songs'])
 
+    # Move the legend outside the plot area
     legend_elements = [Patch(facecolor='white', edgecolor='black', label='No songs listened to')]
-    plt.gca().add_artist(plt.legend(handles=legend_elements, loc='best', bbox_to_anchor=(1.05, 0.6), frameon=False, ncol=1))
+    plt.legend(
+        handles=legend_elements,
+        loc='upper left',
+        bbox_to_anchor=(1.05, 1),
+        frameon=False
+    )
+
+    # Adjust layout to make room for the legend
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
 
     x_labels = [f"{date.year % 100:02d}-{date.month:02d}" for date in pivot_table_log.columns.to_timestamp()]
     ax.set_xticklabels(x_labels)
 
-    plt.tight_layout()
     filename = 'static/heatmap.png'
     plt.savefig(filename)
     plt.close()
