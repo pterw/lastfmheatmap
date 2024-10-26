@@ -2,27 +2,41 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Last.fm Heatmap</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 </head>
-<body class="container">
-    <h1 class="mt-4">Generate Your Last.fm Listening Heatmap</h1>
-    <form method="POST" enctype="multipart/form-data">
-        <div class="form-group">
-            <label for="username">Last.fm Username:</label>
-            <input type="text" class="form-control" id="username" name="username" required>
-        </div>
-        <div class="form-group">
-            <label for="color_palette">Select Color Palette:</label>
-            <select class="form-control" id="color_palette" name="color_palette">
-                <option value="rocket_r">Rocket</option>
-                <option value="viridis">Viridis</option>
-                <option value="coolwarm">Coolwarm</option>
-                <option value="magma">Magma</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary mt-3">Generate Heatmap</button>
+<body>
+    <form id="form">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        <label for="color_palette">Color Palette:</label>
+        <select id="color_palette" name="color_palette">
+            <option value="rocket_r">Rocket</option>
+            <!-- Add more color palettes if needed -->
+        </select>
+        <button type="submit">Generate Heatmap</button>
     </form>
+
+    <div id="output"></div>
+
+    <script>
+        document.getElementById('form').onsubmit = async function (event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const color_palette = document.getElementById('color_palette').value;
+
+            const response = await fetch('/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, color_palette })
+            });
+            const data = await response.json();
+
+            if (data.message) {
+                setTimeout(() => {
+                    document.getElementById("output").innerHTML = `<img src="/heatmap/${username}" alt="Heatmap result">`;
+                }, 5000); // Adjust the delay as needed
+            }
+        };
+    </script>
 </body>
 </html>

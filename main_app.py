@@ -2,7 +2,7 @@ import os
 import asyncio
 import pandas as pd
 import numpy as np
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, Response
 import redis
 from rq import Queue
 from worker import fetch_and_process_data
@@ -30,6 +30,13 @@ async def index():
         return jsonify({"message": f"Processing {username}'s data. Job ID: {job.get_id()}"}), 202
 
     return render_template('index.html')
+
+@app.route('/heatmap/<username>')
+def get_heatmap(username):
+    image_data = conn.get(f"{username}_heatmap")
+    if image_data:
+        return Response(image_data, mimetype='image/png')
+    return jsonify({"error": "Image not found"}), 404
 
 if __name__ == '__main__':
     app.run()

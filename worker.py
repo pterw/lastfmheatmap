@@ -3,23 +3,23 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-import requests  # Use synchronous requests for RQ compatibility
+import aiohttp
 from io import BytesIO
 from dotenv import load_dotenv
+import redis
+from rq import Queue
 from datetime import datetime
-from matplotlib.patches import Patch
 
 load_dotenv()
 
 API_KEY = os.getenv('LASTFM_API_KEY')
-REDIS_URL = os.getenv('REDISCLOUD_URL')
 
-def fetch_page(url, params, page):
-    params['page'] = page
-    response = requests.get(url, params=params)
-    return response.json() if response.status_code == 200 else None
+# Connect to Redis
+redis_url = os.getenv('REDISCLOUD_URL')
+conn = redis.from_url(redis_url)
+q = Queue(connection=conn)
 
-def fetch_all_pages(username):
+async def fetch_all_pages(username):
     url = 'http://ws.audioscrobbler.com/2.0/'
     params = {
         'method': 'user.getRecentTracks',
@@ -30,17 +30,20 @@ def fetch_all_pages(username):
     }
 
     all_tracks = []
-    first_page_data = fetch_page(url, params, 1)
-    if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
-        return []
+    async with aiohttp.ClientSession() as session:
+        first_page_data = await fetch_page(session, url, params, 1)
+        if not first_page_data or 'recenttracks' not in first_page_data or 'track' not in first_page_data['recenttracks']:
+            return []
 
-    total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
-    all_tracks.extend(first_page_data['recenttracks']['track'])
-    
-    for page in range(2, min(total_pages + 1, 100)):
-        data = fetch_page(url, params, page)
-        if data and 'recenttracks' in data and 'track' in data['recenttracks']:
-            all_tracks.extend(data['recenttracks']['track'])
+        total_pages = int(first_page_data['recenttracks']['@attr']['totalPages'])
+        all_tracks.extend(first_page_data['recenttracks']['track'])
+        
+        for page in range(2, min(total_pages + 1, 100)):  # Limit to 100 pages for performance
+            data = await fetch_page(session, url, params, page)
+            if data and 'recenttracks' in data and 'track' in data['recenttracks']:
+                all_tracks.extend(data['recenttracks']['track'])
+            if page % 10 == 0:
+                await asyncio.sleep(1)
 
     return all_tracks
 
@@ -50,7 +53,9 @@ def process_scrobble_data(tracks):
         return pd.DataFrame()
 
     def extract_date(x):
-        return x.get('#text', None) if isinstance(x, dict) else None
+        if isinstance(x, dict):
+            return x.get('#text', None)
+        return None
 
     df['date'] = pd.to_datetime(df['date'].apply(extract_date), format='%d %b %Y, %H:%M')
     df['Day'] = df['date'].dt.date
@@ -100,7 +105,8 @@ def create_heatmap(daily_counts, username, color_palette="rocket_r"):
     return img
 
 def fetch_and_process_data(username, color_palette):
-    tracks = fetch_all_pages(username)
+    tracks = asyncio.run(fetch_all_pages(username))
     daily_counts = process_scrobble_data(tracks)
     heatmap_image = create_heatmap(daily_counts, username, color_palette)
-    # Save or use heatmap_image as needed, e.g., send as email, store in database, etc.
+    conn.set(f"{username}_heatmap", heatmap_image.getvalue())
+    return f"/heatmap/{username}"
