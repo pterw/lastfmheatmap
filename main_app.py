@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, send_file
 import asyncio
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,6 +10,7 @@ from datetime import datetime
 import nest_asyncio
 from dotenv import load_dotenv
 from matplotlib.patches import Patch
+from io import BytesIO
 
 load_dotenv()
 nest_asyncio.apply()
@@ -48,12 +49,11 @@ async def fetch_all_pages(username):
         print(f"Total pages: {total_pages}")
 
         all_tracks.extend(first_page_data['recenttracks']['track'])
-        for page in range(2, total_pages + 1):
+        for page in range(2, min(total_pages + 1, 100)):  # Limit to 100 pages for performance
             data = await fetch_page(session, url, params, page)
             if data and 'recenttracks' in data and 'track' in data['recenttracks']:
                 all_tracks.extend(data['recenttracks']['track'])
 
-            # Avoid fetching too many pages at once
             if page % 10 == 0:
                 await asyncio.sleep(1)
 
@@ -74,7 +74,7 @@ def process_scrobble_data(tracks):
     daily_counts = df.groupby('Day').size().reset_index(name='Counts')
     return daily_counts
 
-def create_heatmap(daily_counts):
+def create_heatmap(daily_counts, username, color_palette="rocket_r"):
     if not os.path.exists('static'):
         os.makedirs('static')
     
@@ -90,13 +90,12 @@ def create_heatmap(daily_counts):
         for month in pivot_table.columns:
             if day > month.days_in_month:
                 pivot_table.at[day, month] = np.nan
-    
-    # Apply log transformation without converting zero counts to NaN
+
     pivot_table_log = pivot_table.applymap(lambda x: np.log10(x + 1) if not np.isnan(x) else np.nan)
 
     # Set up the colormap
-    cmap = sns.color_palette("rocket_r", as_cmap=True)
-    cmap.set_bad(color='gray')  # Non-existent days will be gray
+    cmap = sns.color_palette(color_palette, as_cmap=True)
+    cmap.set_bad(color='gray')
 
     plt.figure(figsize=(25, 10))
     ax = sns.heatmap(
@@ -108,8 +107,8 @@ def create_heatmap(daily_counts):
         vmax=pivot_table_log.max().max(),
         square=True
     )
-    plt.title('Heatmap of Songs Listened to Per Day')
-    plt.xlabel('Month')
+    plt.title(f'{username}\'s Last.fm Listening Heatmap')
+    plt.xlabel('Month (Year-Month Format)')
     plt.ylabel('Day of Month')
     plt.xticks(rotation=45)
 
@@ -119,8 +118,8 @@ def create_heatmap(daily_counts):
     cbar.set_ticks([0, pivot_table_log.max().max()])
     cbar.set_ticklabels(['1 song', f'{max_songs} songs'])
 
-    # Move the legend outside the plot area
-    legend_elements = [Patch(facecolor='white', edgecolor='black', label='No songs listened to')]
+    # Legend for no songs listened
+    legend_elements = [Patch(facecolor='gray', edgecolor='black', label='No songs listened to')]
     plt.legend(
         handles=legend_elements,
         loc='upper left',
@@ -128,27 +127,32 @@ def create_heatmap(daily_counts):
         frameon=False
     )
 
-    # Adjust layout to make room for the legend
     plt.tight_layout(rect=[0, 0, 0.85, 1])
 
     x_labels = [f"{date.year % 100:02d}-{date.month:02d}" for date in pivot_table_log.columns.to_timestamp()]
     ax.set_xticklabels(x_labels)
 
-    filename = 'static/heatmap.png'
-    plt.savefig(filename)
+    # Save to BytesIO for download
+    img = BytesIO()
+    plt.savefig(img, format='png')
+    img.seek(0)
     plt.close()
-    return filename
+    return img
 
 @app.route('/', methods=['GET', 'POST'])
 async def index():
     filename = None
     if request.method == 'POST':
         username = request.form['username']
+        color_palette = request.form.get('color_palette', 'rocket_r')  # Default palette
 
         all_tracks = await fetch_all_pages(username)
         daily_counts = process_scrobble_data(all_tracks)
-        filename = create_heatmap(daily_counts)
-    return render_template('index.html', filename=filename)
+        heatmap_image = create_heatmap(daily_counts, username, color_palette=color_palette)
+
+        return send_file(heatmap_image, mimetype='image/png', as_attachment=True, download_name=f'{username}_heatmap.png')
+
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run()
