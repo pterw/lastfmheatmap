@@ -4,18 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Last.fm Heatmap</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 </head>
-<body>
-    <h1>Last.fm Heatmap</h1>
-    <form method="post">
-        Last.fm Username: <input type="text" name="username">
-        <input type="submit" value="Submit">
+<body class="container">
+    <h1 class="mt-4">Generate Your Last.fm Listening Heatmap</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="username">Last.fm Username:</label>
+            <input type="text" class="form-control" id="username" name="username" required>
+        </div>
+        <div class="form-group">
+            <label for="color_palette">Select Color Palette:</label>
+            <select class="form-control" id="color_palette" name="color_palette">
+                <option value="rocket_r">Rocket</option>
+                <option value="viridis">Viridis</option>
+                <option value="coolwarm">Coolwarm</option>
+                <option value="magma">Magma</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary mt-3">Generate Heatmap</button>
     </form>
-    <div id="heatmap">
-        {% if filename %}
-            <h2>Heatmap:</h2>
-            <img src="{{ filename }}" alt="Heatmap">
-        {% endif %}
-    </div>
 </body>
 </html>
